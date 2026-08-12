@@ -13,11 +13,12 @@ apt update && apt upgrade -y
 # install dependencies
 apt install -y autoconf automake devscripts g++ git-core libncurses5-dev libtool libtool-bin make libjpeg-dev
 apt install -y pkg-config flac  libgdbm-dev libdb-dev gettext sudo equivs git dpkg-dev libpq-dev
-apt install -y liblua5.2-dev libtiff5-dev libperl-dev libcurl4-openssl-dev libsqlite3-dev libpcre3-dev
+apt install -y liblua5.2-dev libtiff5-dev libperl-dev libcurl4-openssl-dev libsqlite3-dev
 apt install -y devscripts libspeexdsp-dev libspeex-dev libldns-dev libedit-dev libopus-dev libmemcached-dev
 apt install -y libshout3-dev libmpg123-dev libmp3lame-dev yasm nasm libsndfile1-dev libuv1-dev libvpx-dev
 apt install -y libavformat-dev libswscale-dev libvlc-dev sox libsox-fmt-all
-apt install -y libpcre3-dev libtiff5-dev
+apt install -y libtiff5-dev
+apt install -y libpcre3-dev
 
 #install dependencies that depend on the operating system version
 if [ ."$os_codename" = ."noble" ]; then
@@ -42,8 +43,8 @@ apt install -y sqlite3 unzip
 # preserve the executing directory, so we need to return after we are done
 CWD=$(pwd)
 
-#install the following dependencies if the switch version is greater than 1.10.0
-if [ ."$switch_branch" = ."master" ] || [ $(echo "$switch_version" | tr -d '.') -gt 1100 ]; then
+# install libks - dependency for switch versions greater than 1.10.0
+if [ ! -d /usr/src/libks ]; then
 
 	# libks build-requirements
 	apt install -y cmake uuid-dev
@@ -58,8 +59,10 @@ if [ ."$switch_branch" = ."master" ] || [ $(echo "$switch_version" | tr -d '.') 
 
 	# libks C includes
 	export C_INCLUDE_PATH=/usr/include/libks
+fi
 
-	# sofia-sip
+# sofia-sip - dependency for switch versions greater than 1.10.0
+if [ ! -d /usr/src/sofia-sip ]; then
 	cd /usr/src
 	if [ ."$sofia_version" = ."master" ]; then
 		git clone https://github.com/freeswitch/sofia-sip.git sofia-sip
@@ -70,14 +73,17 @@ if [ ."$switch_branch" = ."master" ] || [ $(echo "$switch_version" | tr -d '.') 
 	else
 		wget https://github.com/freeswitch/sofia-sip/archive/refs/tags/v$sofia_version.zip
 		unzip v$sofia_version.zip
-		cd sofia-sip-$sofia_version
+		mv sofia-sip-$sofia_version sofia-sip
+		cd sofia-sip
 	fi
 	sh autogen.sh
 	./configure --enable-debug
 	make -j $(getconf _NPROCESSORS_ONLN)
 	make install
+fi
 
-	# spandsp
+# spandsp - dependency for switch versions greater than 1.10.0
+if [ ! -d /usr/src/spandsp ]; then
 	cd /usr/src
 	git clone https://github.com/freeswitch/spandsp.git spandsp
 	cd spandsp
@@ -117,19 +123,20 @@ fi
 #check for stable release
 if [ ."$switch_branch" != ."master" ] && [ ."$switch_branch" = ."stable" ]; then
 	echo "Using version $switch_version"
-	#1.8 and older
-	if [ $(echo "$switch_version" | tr -d '.') -lt 1100 ]; then
-		wget http://files.freeswitch.org/freeswitch-releases/freeswitch-$switch_version.zip
-		unzip freeswitch-$switch_version.zip
+
+	# Get the source code using git
+	if [ ."$switch_version" = ."1.11" ]; then
+	    git clone https://github.com/signalwire/freeswitch.git freeswitch-$switch_version
+
+		# Change the working directory
 		cd /usr/src/freeswitch-$switch_version
 
-		# Reset repo just-in-case we are rebuilding
-		#git reset --hard HEAD && git clean -fdx
+		# Get the stable branch
+		git checkout v$switch_version
 	fi
 
-	#1.10.0 and newer
-	if [ $(echo "$switch_version" | tr -d '.') -gt 1100 ]; then
-		# Get the source code using git
+	# Get the source code using git
+	if [ ."$switch_version" = ."1.10.12" ]; then
 		git clone https://github.com/fusionpbx/freeswitch freeswitch-$switch_version
 
 		# Change the working directory
@@ -137,26 +144,26 @@ if [ ."$switch_branch" != ."master" ] && [ ."$switch_branch" = ."stable" ]; then
 
 		# Get the stable branch
 		git checkout $switch_version
-
-		# Reset repo just-in-case we are rebuilding
-		#git reset --hard origin/master && git clean -fdx
-
-		#wget http://files.freeswitch.org/freeswitch-releases/freeswitch-$switch_version.-release.zip
-		#unzip freeswitch-$switch_version.-release.zip
-		#mv freeswitch-$switch_version.-release freeswitch-$switch_version
-
-		# bootstrap is needed if using git
-		./bootstrap.sh -j
-
-		#apply rtp timestamp patch - Fix RTP audio issues use the following for additional information. https://github.com/briteback/freeswitch/commit/9f8968ccabb8a4e0353016d4ea0ff99561b005f1
-		#patch -u /usr/src/freeswitch-$switch_version/src/switch_rtp.c -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/switch_rtp.diff
-
-		#apply pull request 2300 to Fix session deadlock that results in stale or stuck calls. https://github.com/signalwire/freeswitch/pull/2300
-		#patch -d /usr/src/freeswitch-$switch_version/src -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/pull_2300.diff
-
-		#apply mod_pgsql patch
-		#patch -u /usr/src/freeswitch-$switch_version/src/mod/databases/mod_pgsql/mod_pgsql.c -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/mod_pgsql.patch
 	fi
+
+	# Reset repo just-in-case we are rebuilding
+	#git reset --hard origin/master && git clean -fdx
+
+	#wget http://files.freeswitch.org/freeswitch-releases/freeswitch-$switch_version.-release.zip
+	#unzip freeswitch-$switch_version.-release.zip
+	#mv freeswitch-$switch_version.-release freeswitch-$switch_version
+
+	# bootstrap is needed if using git
+	./bootstrap.sh -j
+
+	#apply rtp timestamp patch - Fix RTP audio issues use the following for additional information. https://github.com/briteback/freeswitch/commit/9f8968ccabb8a4e0353016d4ea0ff99561b005f1
+	#patch -u /usr/src/freeswitch-$switch_version/src/switch_rtp.c -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/switch_rtp.diff
+
+	#apply pull request 2300 to Fix session deadlock that results in stale or stuck calls. https://github.com/signalwire/freeswitch/pull/2300
+	#patch -d /usr/src/freeswitch-$switch_version/src -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/pull_2300.diff
+
+	#apply mod_pgsql patch
+	#patch -u /usr/src/freeswitch-$switch_version/src/mod/databases/mod_pgsql/mod_pgsql.c -i /usr/src/fusionpbx-install.sh/debian/resources/switch/source/mod_pgsql.patch
 fi
 
 # enable required modules
